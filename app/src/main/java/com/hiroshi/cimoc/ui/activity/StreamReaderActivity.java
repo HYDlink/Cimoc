@@ -1,6 +1,9 @@
 package com.hiroshi.cimoc.ui.activity;
 
 import android.graphics.Point;
+
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.LinearSmoothScroller;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.hiroshi.cimoc.R;
@@ -19,6 +22,7 @@ import java.util.List;
 public class StreamReaderActivity extends ReaderActivity {
 
     private int mLastPosition = 0;
+    private RecyclerView.SmoothScroller mSmoothScroller;
 
     @Override
     protected void initView() {
@@ -35,6 +39,21 @@ public class StreamReaderActivity extends ReaderActivity {
         ((ZoomableRecyclerView) mRecyclerView).setDoubleTap(
                 !mPreference.getBoolean(PreferenceManager.PREF_READER_BAN_DOUBLE_CLICK, false));
         ((ZoomableRecyclerView) mRecyclerView).setTapListenerListener(this);
+
+        // To smooth scroll position at item top, rather than bottom,
+        // https://stackoverflow.com/a/43505830
+        mSmoothScroller = new LinearSmoothScroller(mRecyclerView.getContext()) {
+            @Override
+            protected int getHorizontalSnapPreference() {
+                return LinearSmoothScroller.SNAP_TO_START;
+            }
+
+            @Override
+            protected int getVerticalSnapPreference() {
+                return LinearSmoothScroller.SNAP_TO_START;
+            }
+        };
+
         mRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
@@ -111,6 +130,33 @@ public class StreamReaderActivity extends ReaderActivity {
 
     @Override
     protected void prevPage() {
+        boolean isScrollByWindow = false;
+        if (isScrollByWindow) {
+            scrollPrevByViewPortSize();
+        } else {
+            int position = getCurPosition();
+            int firstVisibleItemPosition = ((LinearLayoutManager) mLayoutManager).findFirstVisibleItemPosition();
+            int firstCompletelyVisibleItemPosition = ((LinearLayoutManager) mLayoutManager).findFirstCompletelyVisibleItemPosition();
+            // TODO get the screen can view page count at same time, and use this to scroll prev
+            int delta = 1;
+            int targetPos = firstVisibleItemPosition < firstCompletelyVisibleItemPosition ?
+                    firstVisibleItemPosition : firstVisibleItemPosition - delta;
+            if (targetPos == position) {
+                scrollPrevByViewPortSize();
+            } else {
+                targetPos = Math.max(targetPos, 0);
+                mSmoothScroller.setTargetPosition(targetPos);
+                mLayoutManager.startSmoothScroll(mSmoothScroller);
+
+            }
+        }
+
+        if (mLayoutManager.findFirstVisibleItemPosition() == 0) {
+            loadPrev();
+        }
+    }
+
+    private void scrollPrevByViewPortSize() {
         Point point = new Point();
         getWindowManager().getDefaultDisplay().getSize(point);
         if (turn == PreferenceManager.READER_TURN_ATB) {
@@ -118,22 +164,39 @@ public class StreamReaderActivity extends ReaderActivity {
         } else {
             mRecyclerView.smoothScrollBy(-point.x, 0);
         }
-        if (mLayoutManager.findFirstVisibleItemPosition() == 0) {
-            loadPrev();
-        }
     }
 
     @Override
     protected void nextPage() {
+        boolean isScrollByWindow = false;
+        if (isScrollByWindow) {
+            scrollNextByViewPortSize();
+        } else {
+            int position = getCurPosition();
+            int lastVisibleItemPosition = ((LinearLayoutManager) mLayoutManager).findLastVisibleItemPosition();
+            int lastCompletelyVisibleItemPosition = ((LinearLayoutManager) mLayoutManager).findLastCompletelyVisibleItemPosition();
+            int targetPos = lastCompletelyVisibleItemPosition < lastVisibleItemPosition ?
+                    lastVisibleItemPosition : lastVisibleItemPosition + 1;
+            if (targetPos == position) {
+                scrollNextByViewPortSize();
+            } else {
+                targetPos = Math.min(mReaderAdapter.getItemCount() - 1, targetPos);
+                mSmoothScroller.setTargetPosition(targetPos);
+                mLayoutManager.startSmoothScroll(mSmoothScroller);
+            }
+        }
+        if (mLayoutManager.findLastVisibleItemPosition() == mReaderAdapter.getItemCount() - 1){
+            loadNext();
+        }
+    }
+
+    private void scrollNextByViewPortSize() {
         Point point = new Point();
         getWindowManager().getDefaultDisplay().getSize(point);
         if (turn == PreferenceManager.READER_TURN_ATB) {
             mRecyclerView.smoothScrollBy(0, point.y);
         } else {
             mRecyclerView.smoothScrollBy(point.x, 0);
-        }
-        if (mLayoutManager.findLastVisibleItemPosition() == mReaderAdapter.getItemCount() - 1) {
-            loadNext();
         }
     }
 
